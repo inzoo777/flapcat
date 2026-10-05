@@ -14,25 +14,24 @@
     body {
       background: #111;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      overflow: hidden;
+      font-family: sans-serif;
     }
     #game-container {
       position: relative;
       width: 360px;
       height: 640px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      background: #70c5ce;
       border-radius: 12px;
       overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
     canvas {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 360px;
+      height: 640px;
     }
   </style>
 </head>
@@ -46,18 +45,22 @@
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
 
-  // State Variables
-  let gameState = "START"; // START, PLAYING, GAMEOVER
+  let gameState = "START"; 
   let score = 0;
-  let highScore = localStorage.getItem("flappyCatHighScore") || 0;
+  let highScore = 0;
   let frameCount = 0;
 
-  // Cat Object
+  try {
+    highScore = localStorage.getItem("flappyCatHighScore") || 0;
+  } catch(e) {
+    highScore = 0;
+  }
+
   const cat = {
     x: 80,
     y: 280,
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     gravity: 0.35,
     lift: -7.5,
     velocity: 0,
@@ -69,10 +72,9 @@
       this.velocity += this.gravity;
       this.y += this.velocity;
 
-      // Floor / Ceiling constraints
       if (this.y + this.height >= canvas.height - 40) {
         this.y = canvas.height - 40 - this.height;
-        endGame();
+        gameState = "GAMEOVER";
       }
       if (this.y <= 0) {
         this.y = 0;
@@ -81,11 +83,11 @@
     },
     draw() {
       ctx.save();
-      ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+      ctx.translate(this.x + 18, this.y + 18);
       let angle = Math.min(Math.max(this.velocity * 3, -25), 70);
       ctx.rotate((angle * Math.PI) / 180);
 
-      // Cat Face/Head (Orange)
+      // Cat Face
       ctx.fillStyle = "#FF8C00";
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
@@ -93,18 +95,10 @@
 
       // Ears
       ctx.fillStyle = "#D2691E";
-      // Left Ear
       ctx.beginPath();
-      ctx.moveTo(-14, -10);
-      ctx.lineTo(-6, -22);
-      ctx.lineTo(-2, -12);
-      ctx.fill();
-      // Right Ear
+      ctx.moveTo(-14, -10); ctx.lineTo(-6, -22); ctx.lineTo(-2, -12); ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(2, -12);
-      ctx.lineTo(6, -22);
-      ctx.lineTo(14, -10);
-      ctx.fill();
+      ctx.moveTo(2, -12); ctx.lineTo(6, -22); ctx.lineTo(14, -10); ctx.fill();
 
       // Eyes
       ctx.fillStyle = "#FFF";
@@ -120,4 +114,146 @@
       ctx.fill();
 
       // Nose
-      ctx.fillStyle = "#FFB
+      ctx.fillStyle = "#FFB6C1";
+      ctx.beginPath();
+      ctx.arc(0, 3, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    },
+    jump() {
+      this.velocity = this.lift;
+    }
+  };
+
+  const pipes = [];
+  const pipeWidth = 52;
+  const pipeGap = 130;
+  const pipeSpeed = 2.2;
+
+  function spawnPipe() {
+    const minTop = 60;
+    const maxTop = canvas.height - pipeGap - 120;
+    const topHeight = Math.floor(Math.random() * (maxTop - minTop + 1)) + minTop;
+
+    pipes.push({
+      x: canvas.width,
+      top: topHeight,
+      bottom: canvas.height - topHeight - pipeGap - 40,
+      passed: false
+    });
+  }
+
+  function updatePipes() {
+    if (frameCount % 100 === 0) spawnPipe();
+
+    for (let i = pipes.length - 1; i >= 0; i--) {
+      let p = pipes[i];
+      p.x -= pipeSpeed;
+
+      if (
+        cat.x + cat.width > p.x &&
+        cat.x < p.x + pipeWidth &&
+        (cat.y < p.top || cat.y + cat.height > canvas.height - p.bottom - 40)
+      ) {
+        gameState = "GAMEOVER";
+      }
+
+      if (!p.passed && p.x + pipeWidth < cat.x) {
+        p.passed = true;
+        score++;
+        if (score > highScore) {
+          highScore = score;
+          try { localStorage.setItem("flappyCatHighScore", highScore); } catch(e){}
+        }
+      }
+
+      if (p.x + pipeWidth < 0) pipes.splice(i, 1);
+    }
+  }
+
+  function drawPipes() {
+    ctx.fillStyle = "#4CAF50";
+    pipes.forEach(p => {
+      ctx.fillRect(p.x, 0, pipeWidth, p.top);
+      let bottomY = canvas.height - p.bottom - 40;
+      ctx.fillRect(p.x, bottomY, pipeWidth, p.bottom);
+    });
+  }
+
+  function drawGround() {
+    ctx.fillStyle = "#8B5A2B";
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    ctx.fillStyle = "#4CAF50";
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 8);
+  }
+
+  function drawUI() {
+    ctx.fillStyle = "#FFF";
+    ctx.textAlign = "center";
+
+    if (gameState === "START") {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#FFF";
+      ctx.font = "bold 24px sans-serif";
+      ctx.fillText("FLAPPY CAT SKY", canvas.width / 2, 260);
+      ctx.font = "16px sans-serif";
+      ctx.fillText("برك للشاشة باش تبدا", canvas.width / 2, 310);
+    } else if (gameState === "PLAYING") {
+      ctx.font = "bold 36px sans-serif";
+      ctx.fillText(score, canvas.width / 2, 80);
+    } else if (gameState === "GAMEOVER") {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#FF5252";
+      ctx.font = "bold 30px sans-serif";
+      ctx.fillText("GAME OVER", canvas.width / 2, 240);
+      ctx.fillStyle = "#FFF";
+      ctx.font = "18px sans-serif";
+      ctx.fillText(`Score: ${score}`, canvas.width / 2, 290);
+      ctx.fillText(`Best: ${highScore}`, canvas.width / 2, 320);
+      ctx.fillText("برك باش تعاود", canvas.width / 2, 370);
+    }
+  }
+
+  function handleInput(e) {
+    if (e.type === "keydown" && e.code !== "Space") return;
+    
+    if (gameState === "START" || gameState === "GAMEOVER") {
+      score = 0;
+      pipes.length = 0;
+      frameCount = 0;
+      cat.reset();
+      gameState = "PLAYING";
+    } else if (gameState === "PLAYING") {
+      cat.jump();
+    }
+  }
+
+  window.addEventListener("touchstart", handleInput, { passive: true });
+  window.addEventListener("mousedown", handleInput);
+  window.addEventListener("keydown", handleInput);
+
+  function loop() {
+    ctx.fillStyle = "#70c5ce";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (gameState === "PLAYING") {
+      frameCount++;
+      cat.update();
+      updatePipes();
+    }
+
+    drawPipes();
+    drawGround();
+    cat.draw();
+    drawUI();
+
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+</script>
+</body>
+</html>
